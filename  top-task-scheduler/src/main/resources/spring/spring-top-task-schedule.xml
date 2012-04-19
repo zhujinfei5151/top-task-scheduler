@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:aop="http://www.springframework.org/schema/aop"
+	xsi:schemaLocation="
+	http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-2.5.xsd
+	http://www.springframework.org/schema/aop http://www.springframework.org/schema/aop/spring-aop-2.5.xsd"
+	default-autowire="byName">
+    
+	<!-- ======================================================================== -->
+    <!--  							Master                                        -->
+    <!-- ======================================================================== -->
+    <bean id="master" class="com.taobao.top.waverider.master.MasterNode">
+    	<property name="netWorkServer" ref="netWorkServer"/>
+    	<property name="sessionManager" ref="sessionManager"/>
+    </bean>
+    
+    <bean id="masterHeartbeatCommandHandler" class="com.taobao.top.waverider.command.MasterHeartbeatCommandHandler">
+    	<property name="master" ref="master"/>
+    </bean>
+    <bean id="sessionManager" class="com.taobao.top.waverider.session.DefaultSessionManager">
+    	<property name="maxSessionCount" value="1024" />
+    	<property name="preInitSessionCount" value="1" />
+    	<property name="increaseSessionCount" value="2" />
+    	<property name="commandDispatcher" ref="masterCommandDispatcher" />
+    </bean>
+    
+    <bean id="masterCommandDispatcher" class="com.taobao.top.waverider.command.SampleCommandDispatcher">
+    	<property name="commandRoutingTable">
+    		<map>
+    			<entry key="0">
+    				<ref bean="masterHeartbeatCommandHandler" />
+    			</entry>
+    			<entry key="10">
+    				<ref bean="masterPullJobCommandHandler" />
+    			</entry>
+    			<entry key="11">
+    				<ref bean="masterPushResultCommandHandler" />
+    			</entry>
+    		</map>
+    	</property>
+    </bean>
+    
+    <bean id="netWorkServer" class="com.taobao.top.waverider.network.DefaultNetWorkServer">
+    	<property name="sessionManager" ref="sessionManager" />
+    	<property name="hostName" value="127.0.0.1" />
+    </bean>
+    
+    <bean id="masterPullJobCommandHandler" class="com.taobao.top.scheduler.command.master.MasterPullJobCommandHandler">
+    	<property name="jobManager" ref="defaultJobManager" />
+    </bean>
+    
+    <bean id="masterPushResultCommandHandler" class="com.taobao.top.scheduler.command.master.MasterPushResultCommandHandler">
+    	<property name="jobManager" ref="defaultJobManager" />
+    	<property name="jobCompletedCallback" ref="jobCompletedCallback" />
+    </bean>
+    
+    <bean id="jobCompletedCallback" class="com.taobao.top.scheduler.job.DefaultJobCompletedCallback">
+    </bean>
+    
+    <bean id="defaultJobManager" class="com.taobao.top.scheduler.job.DefaultJobManager">
+    	<property name="jobProvider" ref="jobProvider" />
+    	<property name="schedulerConfigBean" ref="schedulerConfigBean" />
+    </bean>
+    
+    <bean id="jobProvider" class="com.taobao.top.scheduler.job.DefaultJobProvider">
+     	<property name="jobManager" ref="defaultJobManager" />
+    </bean>
+    
+    <!-- ======================================================================== -->
+    <!--  							Shared                                        -->
+    <!-- ======================================================================== -->
+	<bean id="waveriderConfig" class="com.taobao.top.waverider.config.WaveriderConfig">
+		<property name="slaveCommandProduceInterval" value="60" />
+	</bean>
+	
+	<bean id="scheduler" class="com.taobao.top.scheduler.Scheduler">
+    	<property name="master" ref="master"/>
+    	<property name="slave" ref="slave"/>
+    </bean>
+    
+    <bean id="schedulerConfigBean" class="com.taobao.top.scheduler.config.SchedulerConfigBean">
+    	<property name="jobLogDir" value="/home/sihai"/>
+    </bean>
+    
+    <!-- ======================================================================== -->
+    <!--  							Slave                                         -->
+    <!-- ======================================================================== -->
+    <bean id="slave" class="com.taobao.top.waverider.slave.SlaveNode">
+    	<property name="netWorkClient" ref="netWorkClient"/>
+    	<property name="commandProviderList">
+    		<list>
+    			<ref  bean="commandProvider"/>
+    			<ref  bean="slavePushResultCommandProvider"/>
+    		</list>
+    	</property>
+    	<property name="masterFailureMonitor" ref="masterFailureMonitor"/>
+    </bean>
+    
+    <bean id="slaveHeartbeatCommandHandler" class="com.taobao.top.waverider.command.SlaveHeartbeatCommandHandler">
+    	<property name="slave" ref="slave"/>
+    </bean>
+    <bean id="slaveCommandDispatcher" class="com.taobao.top.waverider.command.SampleCommandDispatcher">
+    	<property name="commandRoutingTable">
+    		<map>
+    			<entry key="0">
+    				<ref bean="slaveHeartbeatCommandHandler" />
+    			</entry>
+    			<entry key="12">
+    				<ref bean="slavePushJobCommandHandler" />
+    			</entry>
+    		</map>
+    	</property>
+    </bean>
+  
+    
+    <bean id="netWorkClient" class="com.taobao.top.waverider.network.DefaultNetWorkClient">
+    	<property name="hostName" value="127.0.0.1" />
+    	<property name="commandDispatcher" ref="slaveCommandDispatcher" />
+    	<property name="slave" ref="slave"/>
+    </bean>
+    
+    <bean id="commandProvider" class="com.taobao.top.scheduler.command.slave.SlaveCommandProvider">
+    	<property name="schedulerConfigBean" ref="schedulerConfigBean" />
+    	<property name="slaveJobManager" ref="slaveJobManager"/>
+    </bean>
+    
+    <bean id="slavePushResultCommandProvider" class="com.taobao.top.scheduler.command.slave.SlavePushResultCommandProvider">
+    	<property name="slaveJobManager" ref="slaveJobManager"/>
+    </bean>
+    
+    
+    
+    <bean id="masterFailureMonitor" class="com.taobao.top.waverider.slave.failure.slave.DefaultMasterFailureMonitor">
+    	<property name="masterFailureHandler" ref="masterFailureHandler" />
+    </bean>
+    
+    <bean id="masterFailureHandler" class="com.taobao.top.waverider.slave.failure.slave.DefaultMasterFailureHandler">
+    </bean>
+    
+    <bean id="slavePushJobCommandHandler" class="com.taobao.top.scheduler.command.slave.SlavePushJobCommandHandler">
+    	<property name="jobConsumer" ref="jobConsumer" />
+    	<property name="slaveJobCompletedCallback" ref="slaveJobManager" />
+    </bean>
+    
+    <bean id="slaveJobManager" class="com.taobao.top.scheduler.SlaveJobManager">
+    	<property name="schedulerConfigBean" ref="schedulerConfigBean" />
+    </bean>
+    
+    <bean id="jobConsumer" class="com.taobao.top.scheduler.job.DefaultJobConsumer">
+    </bean>
+	
+</beans>
